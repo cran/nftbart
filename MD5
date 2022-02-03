@@ -1,9 +1,9 @@
-6f10616f5c3b076b6e10e2090cab8885 *DESCRIPTION
+dca20ab4c458b0603dadc2403847101a *DESCRIPTION
 2ea56c8986c28c7147e22be6d022cbd2 *NAMESPACE
-24a235222525b16defa45c307909b838 *NEWS
+cab0ba9d26a69a9412193857678105f5 *NEWS
 cdacc2c7556d72a7df9f0c728b7b4e7b *R/CDimpute.R
 49646de7fc61832408372b18791094de *R/bartModelMatrix.R
-6776d0aab4e79dda3611b2fc28e69de3 *R/nft.R
+29869415892c2542982f73778836a551 *R/nft.R
 f5e332c2b99e2fd89f227bc2562f3a01 *R/predict.nft.R
 3b22cdaa1fafdf1914414d04716dfa6e *R/rtnorm.R
 ea7ea00adccef3fbc795e493b409d756 *R/xicuts.R
@@ -21,7 +21,7 @@ df0225a3d937bb0481387dba98835cb6 *demo/lung.R
 917fc8e5c261aef649799f82a855b29c *man/bartModelMatrix.Rd
 248f6e617d9533a1d3387ae6ea454d13 *man/galaxy.Rd
 71d106b66494d39025044958a1ee3a7e *man/lung.Rd
-f8289fb65006648b2eb4c3b380043aca *man/nft.Rd
+404144fd46f8251f4262dd1fa7c22fb2 *man/nft.Rd
 2074a3e67402f5d12fdffbf3a59041b1 *man/predict.nft.Rd
 09f1d1404ab657e406a18715872aaba3 *man/xicuts.Rd
 fc3137bc8236c201fddfad303d468d2c *src/DPMLIOmutau.h
@@ -31,7 +31,7 @@ e3d3cb360fbfdb3c6974e14eb5f09870 *src/Makevars.win
 a4b74ed62d3a6d10652fbd234c2c37f2 *src/ambrt.h
 e3af5fcc93d57291711ae03d029633aa *src/brt.h
 cd033dc8c056c6f7bfd6b32eeb98ef9b *src/brtfuns.h
-f7859b3b75f368494a8aaa358f094ea2 *src/cnft.h
+53ca8cf179106eb343db0e99849c3d75 *src/cnft.h
 216c36fa330208aab067a4d8087df687 *src/cprnft.h
 5164106c4415f20a57d530102f37aa8f *src/cpsambrt_predict.h
 fbd4bc62cf64b736c7fd6002e09d2624 *src/dinfo.h

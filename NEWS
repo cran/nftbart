@@ -4,3 +4,8 @@ Changes and New Features in 1.0 (2021-12-16):
 
 Changes and New Features in 1.1 (2021-12-17):
 	* Fix documentation bug 
+
+Changes and New Features in 1.2 (2022-02-01):
+	* Allow DPM LIO parameters to be altered for
+	debugging/sensitivity analysis 
+	* Return inital AFT fit
