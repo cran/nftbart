@@ -23,7 +23,7 @@ bartModelMatrix=function(X, numcut=0L, usequants=FALSE, type=7,
                          rm.const=FALSE, cont=FALSE, xicuts=NULL,
                          rm.vars=NULL) {
     if(length(rm.vars)>0) {
-        rm.const=TRUE
+        ##rm.const=TRUE
         rm.vars[rm.vars>0]=-rm.vars[rm.vars>0]
     } else rm.vars=0
 
@@ -93,7 +93,7 @@ bartModelMatrix=function(X, numcut=0L, usequants=FALSE, type=7,
                          seq(xs[1], xs[k], length.out=numcut+2)[-c(1, numcut+2)]
                 }
                 else if(k==1) {
-                    rm.vars <- c(rm.vars, -j)
+                    if(rm.const) rm.vars <- c(rm.vars, -j)
                     nc[j] <- 1
                 }
                 else if(k<numcut) {
@@ -131,10 +131,12 @@ bartModelMatrix=function(X, numcut=0L, usequants=FALSE, type=7,
 
     ##xinfo <- xinfo.
 
-    if(rm.const & length(rm.vars)>0) {
+    if(rm.const || (length(rm.vars)>0 && rm.vars!=0)) {
         X <- X[ , rm.vars]
         nc <- nc[rm.vars]
         ##xinfo <- xinfo[rm.vars, ]
+        for(i in length(rm.vars):1)
+            xicuts[[-rm.vars[i] ]]=NULL
     }
     else if(length(rm.vars)==0) rm.vars <- 1:p
 
@@ -149,6 +151,23 @@ bartModelMatrix=function(X, numcut=0L, usequants=FALSE, type=7,
     ## } else ev=NULL
     
     if(numcut==0) return(X)
-    else return(list(X=X, numcut=as.integer(nc), rm.const=rm.vars,
-                     xicuts=xicuts, grp=grp))
+    else {
+        P=sum(grp)
+        dummy=matrix(0, nrow=2, ncol=P)
+        if(P==p) {
+            h=1
+            l=1
+            for(i in 1:length(grp)) {
+                for(j in 1:grp[i]) {
+                    dummy[1, h]=l
+                    dummy[2, h]=l+grp[i]-1
+                    h=h+1
+                }
+                l=h
+            }
+            dimnames(dummy)[[2]]=dimnames(X)[[2]]
+        }
+        return(list(X=X, numcut=as.integer(nc), rm.const=rm.vars,
+                    xicuts=xicuts, grp=grp, dummy=dummy))
+    }
 }

@@ -2,7 +2,7 @@
  * Copyright (C) 2012-2021 Rodney A. Sparapani
  *  
  * This file is part of nftbart.
- * cnft.h
+ * cnft2.h
  *
  * nftbart is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,12 +48,14 @@
 //#include "rrn.h"
 //#include "rtnorm.h"
 
-RcppExport SEXP cnft(
-		     SEXP _ix, 		//train x
+RcppExport SEXP cnft2(
+		     SEXP _ixftrain,
+		     SEXP _ixstrain,
 		     SEXP _iy, 		//train y
 		     SEXP _idelta,         //delta
 		     //  SEXP _ievents,        //events
-		     SEXP _ixp,		//test x
+		     SEXP _ixftest,
+		     SEXP _ixstest,
 		     SEXP _im, 		//num trees mean and var
 		     SEXP _ind,		//number of draws kept  (adapt, then burn, then draw)
 		     SEXP _iburn, 	        //number of burn draws
@@ -66,14 +68,16 @@ RcppExport SEXP cnft(
 		     SEXP _ipower,	        //tree prior for mean and var
 		     SEXP _itc,		//thread count
 		     SEXP _isigmav,	//intial values for sigma_i 
-		     SEXP _ichv,		//change variable (correlation) matrix
+		     SEXP _ichvf,
+		     SEXP _ichvs,
 		     SEXP _ipbd,		//prob of birth/death step, mean and var trees
 		     SEXP _ipb,		//pb prob of birth given birth/death
 		     SEXP _istepwpert,	//(in (0,1)) shrinkage factor for range of acceptable cutpoints for MH, mean and var, (adapts)
 		     SEXP _iprobchv,	//prob of trying change variable move, mean and var, (prob of perturb is 1 minus this)
 		     SEXP _iminnumbot,	//minimum number of observations in a bottom node, mean and var
 		     SEXP _iprintevery,    //how often you print progress
-		     SEXP _ixicuts,        //variable cutpoints for each predictor
+		     SEXP _ixifcuts,   
+		     SEXP _ixiscuts,   
 		     //SEXP _isummarystats,  //boolean, do you want summary stats
 //		     SEXP _ialphao, 
 //		     SEXP _ibetao,
@@ -84,12 +88,9 @@ RcppExport SEXP cnft(
 		     SEXP _phi,
 		     SEXP _prior,
 		     //SEXP _idraws,
-		     SEXP _idrawMuTau,
-		     SEXP _impute_bin, 
-		     SEXP _impute_prior 
-		     // SEXP _impute_mult, // integer vector of column indicators for missing covariates
-		     // SEXP _impute_miss, // integer vector of row indicators for missing values
-		     // SEXP _impute_prior // matrix of prior missing imputation probability
+		     SEXP _idrawMuTau
+		     //SEXP _impute_bin, 
+		     //SEXP _impute_prior 
 		     )
 {
   //random number generation
@@ -102,26 +103,24 @@ RcppExport SEXP cnft(
 
   //--------------------------------------------------
   //process args
-  //x
-  Rcpp::NumericMatrix Xt(_ix);
-  size_t p = Xt.nrow();
-  size_t n = Xt.ncol();
-  double *x = &Xt[0];
+  Rcpp::NumericMatrix Xt_ftrain(_ixftrain), Xt_strain(_ixstrain);
+  size_t pf = Xt_ftrain.nrow(),  ps = Xt_strain.nrow(), n = Xt_ftrain.ncol();
+  double *xftrain = &Xt_ftrain[0], *xstrain = &Xt_strain[0];
 
+  //x out-of-sample
+  Rcpp::NumericMatrix Xt_ftest(_ixftest), Xt_stest(_ixstest);
+  size_t np = Xt_ftest.ncol();
+  double *xftest = nullptr, *xstest = nullptr;
+  if(np) {
+    xftest = &Xt_ftest[0];
+    xstest = &Xt_stest[0];
+  }
+
+/*
   int impute_bin = Rcpp::as<int>(_impute_bin), impute_flag=(impute_bin>=0);
   Rcpp::NumericVector impute_prior(_impute_prior); 
   double impute_post0, impute_post1, *impute_Xrow_ptr = 0;
-  /*
-    Rcpp::IntegerVector impute_mult(_impute_mult); // integer vector of column indicators for missing covariates
-    size_t _K = impute_mult.size(); // number of columns to impute
-    Rcpp::IntegerVector impute_miss(_impute_miss); // length n: integer vector of row indicators for missing values
-    Rcpp::NumericMatrix impute_prior(_impute_prior); // n X K: matrix of prior missing imputation probability
-    Rcpp::NumericVector impute_post(_K); // length K: double vector of posterior missing imputation probability
-    Rcpp::NumericVector impute_fhat(_K); 
-    double *impute_fhat_ptr = 0, *impute_shat_ptr = 0, *impute_Xrow_ptr = 0;
-    if(_K>0) impute_fhat_ptr = &impute_fhat[0];
-    Rcpp::NumericVector impute_shat(_K); 
-  */   
+*/
   //y
   Rcpp::NumericVector yv(_iy);
   double *y = &yv[0], ymax=Rcpp::max(yv);
@@ -140,12 +139,6 @@ RcppExport SEXP cnft(
   //z and w
   Rcpp::NumericVector zv(n), wv(n);
   double *z = &zv[0], *w = &wv[0];
-
-  //x out-of-sample
-  Rcpp::NumericMatrix xpm(_ixp);
-  size_t np = xpm.ncol();
-  double *xp = nullptr;
-  if(np)  xp = &xpm[0];
 
   //number of trees
   Rcpp::IntegerVector im(_im);
@@ -185,8 +178,8 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
   //Rcpp::NumericVector sddraws((nd+burn)*drawsd);
 
   // for varcounts
-  Rcpp::IntegerMatrix fvc(nd, p), svc(nd, p);
-    Rcpp::IntegerVector varcount(p);
+  Rcpp::IntegerMatrix fvc(nd, pf), svc(nd, ps);
+    Rcpp::IntegerVector fvarcount(pf), svarcount(ps);
     unsigned int tmaxd=0;
     unsigned int tmind=0;
     double tavgd=0.0;
@@ -203,18 +196,24 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
   Rcpp::NumericVector sigmav(_isigmav);
   double *sig = &sigmav[0];
   dinfo disig;
-  disig.n=n; disig.p=p; disig.x = x; disig.y = sig; disig.tc=tc;
+  disig.n=n; disig.p=ps; disig.x = xstrain; disig.y = sig; disig.tc=tc;
 
   //f(x) function to be used like sig vector
   double *fun = new double[n]; 
 
   //change variable
-  Rcpp::NumericMatrix chvm(_ichv);
-  COUT << "row, cols chvm: " << chvm.nrow() << ", " << chvm.ncol() << endl;
-  std::vector<std::vector<double> > chgv(chvm.nrow());
-  for(int i=0;i<chvm.nrow();i++) {
-    chgv[i].resize(chvm.ncol());
-    for(int j=0;j<chvm.ncol();j++) chgv[i][j]=chvm(i,j);
+  Rcpp::NumericMatrix chvf(_ichvf), chvs(_ichvs);
+  COUT << "row, cols chvf: " << chvf.nrow() << ", " << chvf.ncol() << endl;
+  COUT << "row, cols chvs: " << chvs.nrow() << ", " << chvs.ncol() << endl;
+  std::vector<std::vector<double> > chgvf(chvf.nrow());
+  for(int i=0;i<chvf.nrow();i++) {
+    chgvf[i].resize(chvf.ncol());
+    for(int j=0;j<chvf.ncol();j++) chgvf[i][j]=chvf(i,j);
+  }
+  std::vector<std::vector<double> > chgvs(chvs.nrow());
+  for(int i=0;i<chvs.nrow();i++) {
+    chgvs[i].resize(chvs.ncol());
+    for(int j=0;j<chvs.ncol();j++) chgvs[i][j]=chvs(i,j);
   }
 
   //control
@@ -269,16 +268,22 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
   //print args
   //  Rprintf("**********************\n");
   Rprintf("n: %ld\n",n);
-  Rprintf("p: %ld\n",p);
-  Rprintf("first row: %lf, %lf\n",x[0],x[p-1]);
-  Rprintf("second row: %lf, %lf\n",x[p],x[2*p-1]);
-  Rprintf("last row: %lf, %lf\n",x[(n-1)*p],x[n*p-1]);
+  Rprintf("pf, ps: %ld, %ld\n",pf, ps);
+  Rprintf("xftrain first row: %lf, %lf\n",xftrain[0],xftrain[pf-1]);
+//  Rprintf("xftrain second row: %lf, %lf\n",xftrain[pf],xftrain[2*pf-1]);
+  Rprintf("xftrain last row: %lf, %lf\n",xftrain[(n-1)*pf],xftrain[n*pf-1]);
+  Rprintf("xstrain first row: %lf, %lf\n",xstrain[0],xstrain[ps-1]);
+//  Rprintf("xstrain second row: %lf, %lf\n",xstrain[ps],xstrain[2*ps-1]);
+  Rprintf("xstrain last row: %lf, %lf\n",xstrain[(n-1)*ps],xstrain[n*ps-1]);
   Rprintf("first and last y: %lf, %lf\n",y[0],y[n-1]);
   if(np) {
     Rprintf("np: %d\n",np);
-    Rprintf("first row xp: %lf, %lf\n",xp[0],xp[p-1]);
-    Rprintf("second row xp: %lf, %lf\n",xp[p],xp[2*p-1]);
-    Rprintf("last row xp : %lf, %lf\n",xp[(np-1)*p],xp[np*p-1]);
+    Rprintf("xftest first row xftest: %lf, %lf\n",xftest[0],xftest[pf-1]);
+//    Rprintf("xftest second row xftest: %lf, %lf\n",xftest[pf],xftest[2*pf-1]);
+    Rprintf("xftest last row xftest : %lf, %lf\n",xftest[(np-1)*pf],xftest[np*pf-1]);
+    Rprintf("xstest first row xstest: %lf, %lf\n",xstest[0],xstest[ps-1]);
+//    Rprintf("xstest second row xstest: %lf, %lf\n",xstest[ps],xstest[2*ps-1]);
+    Rprintf("xstest last row xstest : %lf, %lf\n",xstest[(np-1)*ps],xstest[np*ps-1]);
   } else {
     Rprintf("no test observations\n");
   }
@@ -297,8 +302,10 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
   Rprintf("variance tree prior power: %lf\n",mybetah);
   Rprintf("thread count: %ld\n",tc);
   Rprintf("first and last sigmav: %lf, %lf\n",sigmav[0],sigmav[n-1]);
-  Rprintf("chgv first row: %lf, %lf\n",chgv[0][0],chgv[0][p-1]);
-  Rprintf("chgv last row: %lf, %lf\n",chgv[p-1][0],chgv[p-1][p-1]);
+  Rprintf("chgvf first row: %lf, %lf\n",chgvf[0][0],chgvf[0][pf-1]);
+  Rprintf("chgvf last row: %lf, %lf\n",chgvf[pf-1][0],chgvf[pf-1][pf-1]);
+  Rprintf("chgvs first row: %lf, %lf\n",chgvs[0][0],chgvs[0][ps-1]);
+  Rprintf("chgvs last row: %lf, %lf\n",chgvs[ps-1][0],chgvs[ps-1][ps-1]);
   Rprintf("mean trees prob birth/death: %lf\n",pbd);
   Rprintf("mean trees prob birth: %lf\n",pb);
   Rprintf("variance trees prob birth/death: %lf\n",pbdh);
@@ -330,31 +337,34 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
 	  Rcpp::as<double>(prior["alpha.b"]));
   Rprintf("draw: DPM=%ld, constrain=%ld\n", drawMuTau, constrain);
   //Rprintf("draw: s=%ld, MuTau=%ld\n", draws, drawMuTau);
+/*
   if(impute_flag) {
     cout << "Missing imputation column index:\n" << impute_bin << endl;
     cout << "Missing imputation probabilities:\n index 0=" << impute_prior[0]
 	 << ',' << "index n-1=" << impute_prior[n-1] << endl;
   }
+*/
   Rprintf("printevery: %d\n",printevery);
 
   //--------------------------------------------------
   //make xinfo
-  xinfo xi;
-  Rcpp::List ixi(_ixicuts);
-  if(ixi.length()!= (int)p) {
+  xinfo xif, xis;
+  Rcpp::List ixif(_ixifcuts), ixis(_ixiscuts);
+  if(ixif.length()!= (int)pf || ixis.length()!= (int)ps) {
     Rprintf("Cutpoint definition does not match number of predictor variables!\n");
     return 0;
   }
-  xi.resize(p);
-
-  for(size_t i=0;i<p;i++)
-    xi[i]=Rcpp::as< std::vector<double> >(ixi[i]);
-
-  //summarize input variables:
-  for(size_t i=0;i<p;i++)
-    {
-      COUT << "Variable " << i << " has numcuts=" << xi[i].size() << " : ";
-      COUT << xi[i][0] << " ... " << xi[i][xi[i].size()-1] << endl;
+  xif.resize(pf);
+  for(size_t i=0;i<pf;i++) xif[i]=Rcpp::as< std::vector<double> >(ixif[i]);
+  for(size_t i=0;i<pf;i++) {
+      COUT << "f variable " << i << " has numcuts=" << xif[i].size() << " : ";
+      COUT << xif[i][0] << " ... " << xif[i][xif[i].size()-1] << endl;
+    }
+  xis.resize(ps);
+  for(size_t i=0;i<ps;i++) xis[i]=Rcpp::as< std::vector<double> >(ixis[i]);
+  for(size_t i=0;i<ps;i++) {
+      COUT << "s variable " << i << " has numcuts=" << xis[i].size() << " : ";
+      COUT << xis[i][0] << " ... " << xis[i][xis[i].size()-1] << endl;
     }
 
   for(size_t i=0;i<n;i++) {
@@ -362,33 +372,22 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
     w[i]=1.;   // initialize w
     censor[i] = 1-delta[i]; // -1 left, 0 event, 1 right
     Y(i, 0)=y[i];
+/*
     if(impute_flag) 
       Xt(impute_bin, i)=gen.bin(1, impute_prior[i]);
-    /*
-      if(_K>0) {
-      if(impute_miss[i]==1) {
-      for(size_t j=0; j<_K; j++) {
-      XV(impute_mult[j], i)=0;
-      }
-      size_t k;
-      Rcpp::NumericVector impute_prob(impute_prior.row(i));
-      k=gen.rcat(impute_prob); // use prior prob only
-      XV(impute_mult[k], i)=1;
-      }
-      }
-    */
+*/
   }
 
   //--------------------------------------------------
   //dinfo
   dinfo di;
-  di.n=n; di.p=p; di.x = x; di.y = z; di.tc=tc;
+  di.n=n; di.p=pf; di.x = xftrain; di.y = z; di.tc=tc;
   //--------------------------------------------------
   // set up ambrt object
   ambrt ambm(m);
 
   //cutpoints
-  ambm.setxi(&xi);    //set the cutpoints for this model object
+  ambm.setxi(&xif);    //set the cutpoints for this model object
   //data objects
   ambm.setdata(&di);  //set the data
   //thread count
@@ -405,7 +404,7 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
 	     dopert, //do perturb/change variable proposal?
 	     stepwpert,  //initialize stepwidth for perturb proposal.  If no adaptation it is always this.
 	     probchv,  //probability of doing a change of variable proposal.  perturb prob=1-this.
-	     &chgv  //initialize the change of variable correlation matrix.
+	     &chgvf  //initialize the change of variable correlation matrix.
 	     );
   ambm.setci(tau,sig);
 
@@ -418,11 +417,11 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
   dinfo dips;
   double *r = new double[n]; 
   for(size_t i=0;i<n;i++) r[i]=sigmav[i];
-  dips.x = x; dips.y=r; dips.p=p; dips.n=n; dips.tc=tc;
+  dips.x = xstrain; dips.y=r; dips.p=ps; dips.n=n; dips.tc=tc;
 
 
   //cutpoints
-  psbm.setxi(&xi);    //set the cutpoints for this model object
+  psbm.setxi(&xis);    //set the cutpoints for this model object
   //data objects
   psbm.setdata(&dips);  //set the data
   //thread count
@@ -438,15 +437,15 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
 	     doperth, //do perturb/change variable proposal?
 	     stepwperth,  //initialize stepwidth for perturb proposal.  If no adaptation it is always this.
 	     probchvh,  //probability of doing a change of variable proposal.  perturb prob=1-this.
-	     &chgv  //initialize the change of variable correlation matrix.
+	     &chgvs  //initialize the change of variable correlation matrix.
 	     );
   psbm.setci(nu,lambda);
 
   // x.test predictions
   double *_f = new double[np], *_s = new double[np];
   dinfo f, s;
-  f.x = xp; f.y=_f; f.p = p; f.n=np; f.tc=tc;
-  s.x = xp; s.y=_s; s.p = p; s.n=np; s.tc=tc;
+  f.x = xftest; f.y=_f; f.p = pf; f.n=np; f.tc=tc;
+  s.x = xstest; s.y=_s; s.p = ps; s.n=np; s.tc=tc;
 
   // DPM LIO
   double *mvec = new double[n];
@@ -472,12 +471,14 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
   //brtMethodWrapper fpsbm(&brt::f,psbm);
 
   // x predictions
+/*
   double fhat0, fhat1, shat0=1., shat1=1.;
   dinfo f0, f1, s0, s1;
-  f0.y=&fhat0; f0.p = p; f0.n=1; f0.tc=tc;
-  f1.y=&fhat1; f1.p = p; f1.n=1; f1.tc=tc;
-  s0.y=&shat0; s0.p = p; s0.n=1; s0.tc=tc;
-  s1.y=&shat1; s1.p = p; s1.n=1; s1.tc=tc;
+  f0.y=&fhat0; f0.p = pf; f0.n=1; f0.tc=tc;
+  f1.y=&fhat1; f1.p = pf; f1.n=1; f1.tc=tc;
+  s0.y=&shat0; s0.p = ps; s0.n=1; s0.tc=tc;
+  s1.y=&shat1; s1.p = ps; s1.n=1; s1.tc=tc;
+*/
 
   Rprintf("Starting MCMC...\n");
 
@@ -550,40 +551,6 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
     }
 
     for(size_t k=0;k<n;k++) {
-      if(impute_flag) {
-	if(impute_prior[k]>0. && impute_prior[k]<1.) {
-	  impute_Xrow_ptr=&Xt(0, k);
-	  impute_post0=1.-impute_prior[k];
-	  impute_post1=impute_prior[k];
-	  Xt(impute_bin, k)=0;
-	  f0.x=impute_Xrow_ptr;
-	  ambm.predict(&f0); // result in fhat0
-/*
-	  if(draws) {
-	    s0.x=impute_Xrow_ptr;
-	    psbm.predict(&s0); // result in shat0
-	  }
-*/
-	  Xt(impute_bin, k)=1;
-	  f1.x=impute_Xrow_ptr;
-	  ambm.predict(&f1); // result in fhat1
-// imputation too simplistic if drawDP: need mvec/svec
-	  // if(draws) {
-	  //   s1.x=impute_Xrow_ptr;
-	  //   psbm.predict(&s1); // result in shat1
-	  //   impute_post0 *= R::dnorm(z[k], fhat0, shat0, 0);
-	  //   impute_post1 *= R::dnorm(z[k], fhat1, shat1, 0);
-	  // }
-	  // else
-	    {
-	    impute_post0 *= R::dnorm(z[k], fhat0, sig[k], 0);
-	    impute_post1 *= R::dnorm(z[k], fhat1, sig[k], 0);
-	  }
-	  Xt(impute_bin, k)=
-	    gen.bin(1, impute_post1/(impute_post0+impute_post1));
-	}
-      }
-
       if(drawDP) {
 	z[k] = z[k]-mvec[k]*sig[k];
 	sig[k] = sig[k]*svec[k];
@@ -674,103 +641,6 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
       dnpart[h]=Rcpp::max(C)+1;
     }
 
-    /*
-      if(impute_flag) {
-      for(size_t k=0; k<n; ++k) {
-      if(impute_prior[k]>0. && impute_prior[k]<1.) {
-      impute_Xrow_ptr=&Xt(0, k);
-      impute_post0=1.-impute_prior[k];
-      impute_post1=impute_prior[k];
-      Xt(impute_bin, k)=0;
-      f0.x=impute_Xrow_ptr;
-      ambm.predict(&f0); // result in fhat0
-      if(draws) {
-      s0.x=impute_Xrow_ptr;
-      psbm.predict(&s0); // result in shat0
-      }
-      Xt(impute_bin, k)=1;
-      f1.x=impute_Xrow_ptr;
-      ambm.predict(&f1); // result in fhat1
-      if(draws) {
-      s1.x=impute_Xrow_ptr;
-      psbm.predict(&s1); // result in shat1
-      if(drawDP) {
-      impute_post0 *= 
-      R::dnorm(z[k], mvec[k]+fhat0, svec[k]*shat0, 0);
-      impute_post1 *= 
-      R::dnorm(z[k], mvec[k]+fhat1, svec[k]*shat1, 0);
-      } 
-      else {
-      impute_post0 *= R::dnorm(z[k], fhat0, shat0, 0);
-      impute_post1 *= R::dnorm(z[k], fhat1, shat1, 0);
-      }
-      }
-      else {
-      if(drawDP) {
-      impute_post0 *= 
-      R::dnorm(z[k], mvec[k]+fhat0, svec[k]*sig[k], 0);
-      impute_post1 *= 
-      R::dnorm(z[k], mvec[k]+fhat1, svec[k]*sig[k], 0);
-      } else {
-      impute_post0 *= R::dnorm(z[k], fhat0, sig[k], 0);
-      impute_post1 *= R::dnorm(z[k], fhat1, sig[k], 0);
-      }
-      }
-      Xt(impute_bin, k)=
-      gen.bin(1, impute_post0/(impute_post0+impute_post1));
-      }
-      }
-      }
-    */
-  
-    /* cannot use j or h in this loop
-       if(_K>0) {
-       for(size_t k=0; k<n; ++k) {
-       if(impute_miss[k]==1) {
-       impute_Xrow_ptr=&XV(0, k);
-       impute_post=impute_prior.row(k);
-       for(size_t j=0; j<_K; ++j) {
-       for(size_t h=0; h<_K; ++h) XV(impute_mult[h], k)=0;
-       XV(impute_mult[j], k)=1;
-       _X.x=impute_Xrow_ptr;
-       ambm.predict(&_X);
-       impute_fhat_ptr[j]=_x;
-       //ambm.predict(p, 1, impute_Xrow_ptr, &impute_fhat_ptr[j]);
-       if(draws) {
-       psbm.predict(&_X);
-       impute_shat_ptr[j]=_x;
-       //psbm.predict(p, 1, impute_Xrow_ptr, &impute_shat_ptr[j]);
-       if(drawDP) {
-       impute_post[j] *= R::dnorm(z[k], mvec[k]+impute_fhat_ptr[j],
-       svec[k]*impute_shat_ptr[j], 0);
-       } else {
-       impute_post[j] *= R::dnorm(z[k], impute_fhat_ptr[j],
-       impute_shat_ptr[j], 0);
-       }
-       }
-       else {
-       if(drawDP) {
-       impute_post[j] *= R::dnorm(z[k], mvec[k]+impute_fhat_ptr[j],
-       svec[k]*sig[k], 0);
-       } else {
-       impute_post[j] *= R::dnorm(z[k], impute_fhat_ptr[j],
-       sig[k], 0);
-       }
-       }
-       }
-       for(size_t j=0; j<_K; j++) { 
-       XV(impute_mult[j], k)=0;
-       //prevXV[impute_mult[j]]=0;
-       }
-       size_t h;
-       h=gen.rcat(impute_post); 
-       XV(impute_mult[h], k)=1;
-       //prevXV[impute_mult[h]]=1;
-       }
-       }
-       }
-    */
-
     if(keeping) {
       //save tree to vec format
 
@@ -780,13 +650,13 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
 
       if(drawMuTau>0) dalpha[j]=hyper["alpha"];
 
-      ambm.getstats(&varcount[0],&tavgd,&tmaxd,&tmind);
-      for(size_t k=0;k<p;k++) fvc(j, k)=varcount[k];
+      ambm.getstats(&fvarcount[0],&tavgd,&tmaxd,&tmind);
+      for(size_t k=0;k<pf;k++) fvc(j, k)=fvarcount[k];
 
       //if(draws) 
       {
-	psbm.getstats(&varcount[0],&tavgd,&tmaxd,&tmind);
-	for(size_t k=0;k<p;k++) svc(j, k)=varcount[k];
+	psbm.getstats(&svarcount[0],&tavgd,&tmaxd,&tmind);
+	for(size_t k=0;k<ps;k++) svc(j, k)=svarcount[k];
       }
 
       double wt=1./n;
@@ -933,7 +803,7 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
     double tavgd=0.0;
 */
 
-    ambm.getstats(&varcount[0],&tavgd,&tmaxd,&tmind);
+    ambm.getstats(&fvarcount[0],&tavgd,&tmaxd,&tmind);
     tavgd/=(double)(nd*m);
     ret["f.tavgd"]=tavgd;
     ret["f.tmaxd"]=tmaxd;
@@ -949,7 +819,7 @@ double nu=2./(1.-pow(1.-2/overallnu, opm));
     {
       //for(size_t i=0;i<p;i++) varcount[i]=0;
       //tmaxd=0; tmind=0; tavgd=0.0;
-      psbm.getstats(&varcount[0],&tavgd,&tmaxd,&tmind);
+      psbm.getstats(&svarcount[0],&tavgd,&tmaxd,&tmind);
       tavgd/=(double)(nd*mh);
       ret["s.tavgd"]=tavgd;
       ret["s.tmaxd"]=tmaxd;
