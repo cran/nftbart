@@ -3,7 +3,10 @@
 %\docType{package}
 \title{Drawing Posterior Predictive Realizations for NFT BART models.}
 \description{
-  The function \code{predict.nft()} is the main function for drawing posterior predictive realizations at new inputs using a fitted model stored in a \code{nft} object returned from \code{nft()}.
+  The function \code{predict.nft()} is the main function for drawing
+  posterior predictive realizations at new inputs using a fitted model
+  stored in a \code{nft} object returned from \code{nft()}
+  (this is just a wrapper of \code{predict.nft2}).
 }
 \usage{
 \method{predict}{nft}(
@@ -23,7 +26,7 @@
             na.rm=FALSE,
             seed=NULL,
             ## default settings for NFT:BART/HBART/DPM
-            fmu=object$fmu,
+            fmu=object$NFT$fmu,
             soffset=object$soffset,
             drawDPM=object$drawDPM,
             ## etc.

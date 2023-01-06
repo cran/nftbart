@@ -4,14 +4,16 @@
 \description{
   The \code{nft()} function is for fitting
   NFT BART (Nonparametric Failure Time
-  Bayesian Additive Regression Tree) models. 
+  Bayesian Additive Regression Tree) models
+  (this is just a wrapper of \code{nft2}).
 }
 \usage{
 nft(
     ## data
     x.train, times, delta=NULL, x.test=matrix(nrow=0, ncol=0),
     rm.const=TRUE, rm.dupe=TRUE,
-    impute.bin=NULL, impute.prob=NULL,
+    edraws2=matrix(nrow=0, ncol=0),
+    zdraws2=matrix(nrow=0, ncol=0),
     ## multi-threading
     tc=getOption("mc.cores", 1), 
     ##MCMC
@@ -25,9 +27,9 @@ nft(
     ntree=c(50, 10), numcut=100, xicuts=NULL,
     power=c(2, 2), base=c(0.95, 0.95),
     ## f function
-    k=5, sigmaf=NA, dist='weibull', 
+    fmu=NA, k=5, tau=NA, dist='weibull', 
     ## s function
-    sigmav=NULL, total.lambda=NA, total.nu=10, mask=NULL,
+    total.lambda=NA, total.nu=10, mask=NULL,
     ## survival analysis 
     K=100, events=NULL, TSVS=FALSE,
     ## DPM LIO
@@ -38,7 +40,7 @@ nft(
     a0=3, b0.a=2, b0.b=1, b0=1, b0.draw=1,
     ## misc
     na.rm=FALSE, probs=c(0.025, 0.975), printevery=100,
-    transposed=FALSE
+    transposed=FALSE, pred=FALSE
 )
 
 }
@@ -48,10 +50,12 @@ nft(
   \item{delta}{nx1 vector of the time type for the training data:
   0, for right-censoring; 1, for an event; and, 2, for left-censoring.}
 \item{x.test}{mxp matrix of predictor variables for the test set.}
-  \item{impute.bin}{Indices of the columns of \code{x.train} to be imputed.}
-  \item{impute.prob}{nx1 vector of prior probabilities for imputation.}
+ % \item{impute.bin}{Indices of the columns of \code{x.train} to be imputed.}
+ % \item{impute.prob}{nx1 vector of prior probabilities for imputation.}
       \item{rm.const}{To remove constant variables or not.}
   \item{rm.dupe}{To remove duplicate variables or not.}
+  \item{edraws2}{Draws of \eqn{e} from a mortality model.}
+  \item{zdraws2}{Draws of \eqn{z} from a mortality model.}
   \item{tc}{Number of OpenMP threads to use.}
   \item{nskip}{Number of MCMC iterations to burn-in and discard.}
   \item{ndpost}{Number of MCMC iterations kept after burn-in.}
@@ -73,10 +77,10 @@ nft(
     by the \code{xicuts} function and provided here.}
   \item{power}{Power parameter in the tree depth penalizing prior.}
   \item{base}{Base parameter in the tree depth penalizing prior.}
-  \item{k}{Prior hyperparameter for the mean model.}
-  \item{sigmaf}{SD of \code{y.train} desired for f function leaf prior.}
+  \item{fmu}{Prior parameter for the center of the mean model.}
+  \item{k}{Prior parameter for the mean model.}
+  \item{tau}{Desired \code{SD/ntree} for f function leaf prior if known.}
 \item{dist}{Distribution to be passed to intercept-only AFT model to center \code{y.train}.}
-  \item{sigmav}{Initialization of square-root of variance parameter.}
   \item{total.lambda}{A rudimentary estimate of the process standard deviation. Used in calibrating the variance prior.}
   \item{total.nu}{Shape parameter for the variance prior.}
   \item{mask}{If a proportion is provided, then said quantile
@@ -115,6 +119,8 @@ nft(
     \item{transposed}{Specify \code{TRUE} if all of the pre-processing for
     \code{x.train/x.test} has been conducted prior to the call (including
     tranposing).}
+  \item{pred}{Specify \code{TRUE} if you want to return the \code{pred}
+    item that is used to calculate \code{soffset}.}
 }
 
 \details{

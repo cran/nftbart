@@ -15,6 +15,8 @@ nft2(
     xftest=matrix(nrow=0, ncol=0),
     xstest=matrix(nrow=0, ncol=0),
     rm.const=TRUE, rm.dupe=TRUE,
+    edraws2=matrix(nrow=0, ncol=0),
+    zdraws2=matrix(nrow=0, ncol=0),
     ## multi-threading
     tc=getOption("mc.cores", 1), 
     ##MCMC
@@ -29,9 +31,9 @@ nft2(
     xifcuts=NULL, xiscuts=NULL,
     power=c(2, 2), base=c(0.95, 0.95),
     ## f function
-    k=5, sigmaf=NA, dist='weibull', 
+    fmu=NA, k=5, tau=NA, dist='weibull', 
     ## s function
-    sigmav=NULL, total.lambda=NA, total.nu=10, mask=NULL,
+    total.lambda=NA, total.nu=10, mask=NULL,
     ## survival analysis 
     K=100, events=NULL, TSVS=FALSE,
     ## DPM LIO
@@ -42,7 +44,7 @@ nft2(
     a0=3, b0.a=2, b0.b=1, b0=1, b0.draw=1,
     ## misc
     na.rm=FALSE, probs=c(0.025, 0.975), printevery=100,
-    transposed=FALSE
+    transposed=FALSE, pred=FALSE
 )
 
 }
@@ -58,6 +60,8 @@ nft2(
   %\item{impute.prob}{nx1 vector of prior probabilities for imputation.}
       \item{rm.const}{To remove constant variables or not.}
     \item{rm.dupe}{To remove duplicate variables or not.}
+  \item{edraws2}{Draws of \eqn{e} from a mortality model.}
+  \item{zdraws2}{Draws of \eqn{z} from a mortality model.}
   \item{tc}{Number of OpenMP threads to use.}
   \item{nskip}{Number of MCMC iterations to burn-in and discard.}
   \item{ndpost}{Number of MCMC iterations kept after burn-in.}
@@ -78,10 +82,10 @@ nft2(
     by the \code{xicuts} function and provided here.}
   \item{power}{Power parameter in the tree depth penalizing prior.}
   \item{base}{Base parameter in the tree depth penalizing prior.}
-  \item{k}{Prior hyperparameter for the mean model.}
-  \item{sigmaf}{SD of \code{y.train} desired for f function leaf prior.}
+  \item{fmu}{Prior parameter for the center of the mean model.}
+  \item{k}{Prior parameter for the mean model.}
+\item{tau}{Desired \code{SD/ntree} for f function leaf prior if known.}
 \item{dist}{Distribution to be passed to intercept-only AFT model to center \code{y.train}.}
-  \item{sigmav}{Initialization of square-root of variance parameter.}
   \item{total.lambda}{A rudimentary estimate of the process standard deviation. Used in calibrating the variance prior.}
   \item{total.nu}{Shape parameter for the variance prior.}
   \item{mask}{If a proportion is provided, then said quantile
@@ -120,6 +124,8 @@ nft2(
   \item{transposed}{Specify \code{TRUE} if all of the pre-processing for
     \code{xftrain/xstrain/xftest/xstest} has been conducted prior to the call (including
     tranposing).}
+  \item{pred}{Specify \code{TRUE} if you want to return the \code{pred}
+    item that is used to calculate \code{soffset}.}
 }
 
 \details{
