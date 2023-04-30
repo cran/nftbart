@@ -1,7 +1,7 @@
-## Copyright (C) 2022 Rodney A. Sparapani
+## Copyright (C) 2023 Rodney A. Sparapani
 
 ## This file is part of nftbart.
-## Cindex.R
+## concordance.R
 
 ## nftbart is free software: you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -19,24 +19,28 @@
 ## Author contact information
 ## Rodney A. Sparapani: rsparapa@mcw.edu
 
-Cindex=function(risk, times, delta=NULL)
+concordance=function(draws, times, delta=NULL)
 {   
-    N=length(risk)
+    N=ncol(draws)
     if(N!=length(times))
-        stop('risk and times must be the same length')
+        stop('draw columns and times must be the same length')
     if(length(delta)==0) delta=rep(1, N)
     else if(N!=length(delta))
-        stop('risk and delta must be the same length')
+        stop('draw columns and delta must be the same length')
 
-    l=0
-    k=0
-    for(i in 1:N) {
-        h=which((times[i]==times & delta[i]>delta) |
-                (times[i]<times & delta[i]>0))
-        if(length(h)>0) {
-            l=l+sum(risk[i]>risk[h])
-            k=k+length(h)
+    C=double((N*(N-1)/2))
+    ##C=matrix(nrow=N, ncol=N)
+    k=1
+    for(i in 1:(N-1))
+        for(j in (i+1):N) {
+            if((times[i]==times[j] && delta[i]>delta[j]) ||
+                (times[i]<times[j] && delta[i]>0))
+                C[k]=mean(draws[ , i]<draws[ , j])
+            else if((times[i]==times[j] && delta[i]<delta[j]) ||
+                (times[i]>times[j] && delta[j]>0))
+                C[k]=mean(draws[ , i]>draws[ , j])
+            else C[k]=NA
+            k=k+1
         }
-    }
-    return(l/k)
+    return(mean(C, na.rm=TRUE))
 }
