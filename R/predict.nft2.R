@@ -35,7 +35,8 @@ predict.nft2 = function(
                        probs=c(0.025, 0.975),
                        take.logs=TRUE,
                        na.rm=FALSE,
-                       seed=NULL,
+                       RMST.max=NULL,
+                       ##seed=NULL,
                        ## default settings for NFT:BART/HBART/DPM
                        fmu=object$NFT$fmu,
                        soffset=object$soffset,
@@ -64,12 +65,15 @@ predict.nft2 = function(
     ps = ncol(object$xstrain)
     events.matrix=FALSE
     
-    if(length(K)==0) {
+    if(length(RMST.max)>0) {
+        K=0
+    } else if(length(K)==0) {
         K=0
         take.logs=FALSE
     } else if(K>0) {
         if(length(events)==0) {
-            events = unique(quantile(object$z.train.mean,
+            ##events = unique(quantile(object$z.train.mean,
+            events = unique(quantile(object$times,
                                       probs=(1:K)/(K+1)))
             attr(events, 'names') = NULL
             take.logs=FALSE
@@ -89,7 +93,7 @@ predict.nft2 = function(
     
     if(length(drawDPM)==0) drawDPM=0
 
-    draw.logt=(length(seed)>0)
+    ##draw.logt=(length(seed)>0)
     nd=length(object$s.train.mask)
     mask=(nd>0)
     if(!mask) nd=ndpost
@@ -207,6 +211,13 @@ predict.nft2 = function(
                 pdf.test =list()
                 for(i in 1:H) {
                     h=(i-1)*n+1:n
+                    if(i==1) {
+                        f.fpd=cbind(apply(mu.[ , h], 1, mean))
+                        s.fpd=cbind(apply(sd.[ , h], 1, mean))
+                    } else {
+                        f.fpd=cbind(f.fpd, apply(mu.[ , h], 1, mean))
+                        s.fpd=cbind(s.fpd, apply(sd.[ , h], 1, mean))
+                    }
                     for(j in 1:K) {
                         if(j==1) {
                             surv.fpd[[i]]=list()
@@ -257,6 +268,8 @@ predict.nft2 = function(
                     res$haz.fpd.upper=
                         apply(cbind(res$haz.fpd), 2, quantile, probs=q.upper)
                 res$pdf.fpd.mean =apply(cbind(res$pdf.fpd), 2, mean)
+                res$f.fpd=f.fpd
+                res$s.fpd=s.fpd
                 ## if(K==1) {
                 ##     res$surv.test.mean=apply(res$surv.test, 2, mean)
                 ##     res$haz.test=res$pdf.test/res$surv.test
@@ -314,31 +327,64 @@ predict.nft2 = function(
         }
         res$K=K
         
-        if(draw.logt) {
-            set.seed(seed)
-
+        if(take.logs && length(RMST.max)>0) {
+            ##set.seed(seed)
+            log.RMST.max=log(RMST.max)
             if(drawDPM>0) {
-                res$logt.test=matrix(0, nrow=nd, ncol=np)
+                ##res$logt.test=matrix(0, nrow=nd, ncol=np)
+                res$RMST.test=matrix(0, nrow=nd, ncol=np)
                 H=ncol(object$dpwt.)
                 for(i in 1:np) {
                     mu. = res$f.test[ , i]
                     sd. = res$s.test[ , i]
                     for(h in 1:H) {
-                        res$logt.test[ , i]=res$logt.test[ , i]+
-                            object$dpwt.[ , h]*
-                            rnorm(nd, mu.+sd.*object$dpmu.[ , h],
-                                  sd.*object$dpsd.[ , h])
+                        mu.h=mu.+sd.*object$dpmu.[ , h]
+                        sd.h=sd.*object$dpsd.[ , h]
+                        var.h=sd.h^2
+                        res$RMST.test[ , i]=res$RMST.test[ , i]+
+                            object$dpwt.[ , h]*(
+                            pnorm(log.RMST.max, mu.h+var.h, sd.h)*
+                            exp(mu.h+var.h/2)+
+                            pnorm(log.RMST.max, mu.h, sd.h,lower.tail=FALSE)*
+                            RMST.max)
+                        ## res$logt.test[ , i]=res$logt.test[ , i]+
+                        ##     object$dpwt.[ , h]*
+                        ##     rnorm(nd, mu.+sd.*object$dpmu.[ , h],
+                        ##           sd.*object$dpsd.[ , h])
                     }
                 }
             } else {
-                res$logt.test=matrix(nrow=nd, ncol=np)
+                res$RMST.test=matrix(nrow=nd, ncol=np)
+                ##res$logt.test=matrix(nrow=nd, ncol=np)
                 for(i in 1:np) {
                     mu. = res$f.test[ , i]
                     sd. = res$s.test[ , i]
-                    res$logt.test[ , i]=rnorm(nd, mu., sd.)
+                    var. = sd.^2
+                    ##res$logt.test[ , i]=rnorm(nd, mu., sd.)
+                    res$RMST.test[ , i]=
+                            pnorm(log.RMST.max, mu.+var., sd.)*
+                            exp(mu.+var./2)+
+                            pnorm(log.RMST.max, mu., sd., lower.tail=FALSE)*
+                            RMST.max
                 }
             }
-            res$logt.test.mean=apply(res$logt.test, 2, mean)
+            if(FPD) {
+                res$f.test = NULL
+                res$s.test = NULL
+                H=np%/%n
+                res$RMST.fpd=matrix(nrow=nd, ncol=H)
+                for(h in 1:H) 
+                    res$RMST.fpd[ , h]=apply(res$RMST.test[ , (h-1)*n+1:n], 1, mean)
+                res$RMST.fpd.mean =apply(res$RMST.fpd, 2, mean)
+                res$RMST.fpd.lower=apply(res$RMST.fpd, 2, quantile, probs=q.lower)
+                res$RMST.fpd.upper=apply(res$RMST.fpd, 2, quantile, probs=q.upper)
+            } else {
+            res$RMST.test.mean=apply(res$RMST.test, 2, mean)
+            res$RMST.test.lower=
+                apply(res$RMST.test, 2, quantile, probs=q.lower)
+            res$RMST.test.upper=
+                apply(res$RMST.test, 2, quantile, probs=q.upper)
+            }
         }
     } else {
         res$f.test=res$f.test.
